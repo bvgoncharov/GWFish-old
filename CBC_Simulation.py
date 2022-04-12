@@ -23,43 +23,45 @@ def main():
     # example to run with command-line arguments:
     # python CBC_Simulation.py --pop_file=CBC_pop.hdf5 --detectors ET CE2 --networks [[0,1],[0],[1]]
 
-    folder = './injections/'
-
     parser = argparse.ArgumentParser()
     parser.add_argument(
-        '--pop_file', type=str, default=['CBC_pop.hdf5'], nargs=1,
+        '--pop_file', type=str, default='./injections/CBC_pop.hdf5', nargs=1,
         help='Population to run the analysis on.'
-             'Runs on BBH_injections_1e6.hdf5 if no argument given.')
+             'Runs on BBH_1e5.hdf5 if no argument given.')
     parser.add_argument(
-        '--pop_id', type=str, default=['BBH'], nargs=1,
-        help='Short population identifier for file names.'
-             'Uses BBH if no argument given.')
+        '--pop_id', type=str, default='BBH', nargs=1,
+        help='Short population identifier for file names. Uses BBH if no argument given.')
     parser.add_argument(
         '--detectors', type=str, default=['ET'], nargs='+',
         help='Detectors to analyze. Uses ET as default if no argument given.')
     parser.add_argument(
-        '--networks', default=['[[0]]'], help='Network IDs. Uses [[0]] as default if no argument given.')
+        '--networks', default='[[0]]', nargs=1,
+        help='Network IDs. Uses [[0]] as default if no argument given.')
+    parser.add_argument(
+        '--config', type=str, default='GWFish/detectors.yaml',
+        help='Configuration file where the detector specifications are stored. Uses GWFish/detectors.yaml as default if no argument given.')
+   
+
     args = parser.parse_args()
+    ConfigDet = args.config
 
     threshold_SNR = np.array([0., 9.])  # [min. individual SNR to be included in PE, min. network SNR for detection]
-    #print('threshold_SNR = ',threshold_SNR)
-    max_time_until_merger = 10 * 3.16e7  # used for LISA, where observation times of a signal can be limited by mission lifetime
-    calculate_errors = True   # whether to calculate Fisher-matrix based PE errors
+    calculate_errors = False   # whether to calculate Fisher-matrix based PE errors
     duty_cycle = False  # whether to consider the duty cycle of detectors
 
-    pop_file = args.pop_file[0]
-    # pop_file = 'CBC_pop.hdf5'
-    population = args.pop_id[0]
-    # population = 'BBH'
+    fisher_parameters = ['ra', 'dec', 'psi', 'theta_jn', 'luminosity_distance', 'mass_1', 'mass_2', 'geocent_time', 'phase']
+    #fisher_parameters = ['luminosity_distance','ra','dec']
+
+    pop_file = args.pop_file
+    population = args.pop_id
 
     detectors_ids = args.detectors
-    networks_ids = json.loads(args.networks[0])
+    networks_ids = json.loads(args.networks)
 
-    parameters = pd.read_hdf(folder+pop_file)
+    parameters = pd.read_hdf(pop_file)
 
-    ns = len(parameters)
-
-    network = gw.detection.Network(detectors_ids, number_of_signals=ns, detection_SNR=threshold_SNR, parameters=parameters)
+    network = gw.detection.Network(detectors_ids, detection_SNR=threshold_SNR, parameters=parameters,
+                                   fisher_parameters=fisher_parameters, config=ConfigDet)
 
     # lisaGWresponse(network.detectors[0], frequencyvector)
     # exit()
@@ -67,31 +69,38 @@ def main():
     # horizon(network, parameters.iloc[0], frequencyvector, threshold_SNR, 1./df, fmax)
     # exit()
 
-    #print(parameters.iloc[0])
-    print('Processing CBC population')
+    #waveform_model = 'gwfish_TaylorF2'
+    waveform_model = 'gwfish_IMRPhenomD'
+    #waveform_model = 'lalsim_TaylorF2'
+    #waveform_model = 'lalsim_IMRPhenomD'
+    # waveform_model = 'lalsim_IMRPhenomXPHM'
 
+
+    print('Processing CBC population')
     for k in tqdm(np.arange(len(parameters))):
-        one_parameters = parameters.iloc[k]
+        parameter_values = parameters.iloc[k]
 
         networkSNR_sq = 0
         for d in np.arange(len(network.detectors)):
-            wave, t_of_f = gw.waveforms.TaylorF2(one_parameters, network.detectors[d].frequencyvector, maxn=8)
-            signal = gw.detection.projection(one_parameters, network.detectors[d], wave, t_of_f, max_time_until_merger)
+            wave, t_of_f = gw.waveforms.hphc_amplitudes(waveform_model, parameter_values,
+                                                        network.detectors[d].frequencyvector)
+                                                        #plot=network.detectors[d].plotrange)
+            signal = gw.detection.projection(parameter_values, network.detectors[d], wave, t_of_f)
 
             SNRs = gw.detection.SNR(network.detectors[d], signal, duty_cycle=duty_cycle)
             networkSNR_sq += np.sum(SNRs ** 2)
             network.detectors[d].SNR[k] = np.sqrt(np.sum(SNRs ** 2))
+
             if calculate_errors:
                 network.detectors[d].fisher_matrix[k, :, :] = \
-                    gw.fishermatrix.FisherMatrix(one_parameters, network.detectors[d], max_time_until_merger)
+                    gw.fishermatrix.FisherMatrix(waveform_model, parameter_values, fisher_parameters, network.detectors[d])
 
         network.SNR[k] = np.sqrt(networkSNR_sq)
 
     gw.detection.analyzeDetections(network, parameters, population, networks_ids)
 
     if calculate_errors:
-        gw.fishermatrix.analyzeFisherErrors(network, parameters, population, networks_ids)
-
+        gw.fishermatrix.analyzeFisherErrors(network, parameters, fisher_parameters, population, networks_ids)
 
 if __name__ == '__main__':
     start_time = time.time()
