@@ -1,5 +1,9 @@
 #!/usr/bin/env python
 
+"""
+python GWFish/CBC_Background.py --pop_file GWFish/injections/BBH_1e5.hdf5 --config GWFish/GWFish/detectors.yaml --outdir /home/boris.goncharov/null_stream_out/gwfish/
+"""
+
 import numpy as np
 import pandas as pd
 
@@ -23,7 +27,6 @@ cosmo = FlatLambdaCDM(H0=69.6, Om0=0.286)
 rng = default_rng()
 
 def analyzeForeground(network, h_of_f, dT):
-
     for d in np.arange(len(network.detectors)):
         ff = network.detectors[d].frequencyvector[:,0]
 
@@ -99,6 +102,7 @@ def main():
     args = parser.parse_args()
     ConfigDet = args.config
 
+    popname = 'BBH'
     dT = 60
     N = 7200
     # dT = 24*3600
@@ -111,15 +115,14 @@ def main():
     pop_file = args.pop_file
 
     detectors_ids = args.detectors
-
-    parameters = pd.read_hdf(pop_file)
+    parameters = pd.read_hdf(pop_file[0])
 
     ns = len(parameters)
 
     network = gw.detection.Network(detectors_ids, detection_SNR=threshold_SNR, parameters=parameters,
                                    fisher_parameters=None, config=ConfigDet)
 
-    waveform_model = 'lalbbh_IMRPhenomD'
+    waveform_model = 'lalsim_IMRPhenomD'
     #waveform_model = 'gwfish_TaylorF2'
     # waveform_model = 'lalbbh_TaylorF2'
 
@@ -128,40 +131,49 @@ def main():
     h_of_f = np.zeros((len(frequencyvector), len(network.detectors), N), dtype=complex)
     cnt = np.zeros((N,))
 
-    print('Processing CBC population')
-    for k in tqdm(np.arange(ns)):
-        parameter_values = parameters.iloc[k]
-        tc = parameter_values['geocent_time']
+    fname = '_'.join([popname,str(dT),str(N)])
 
-        # make a precut on the signals; note that this depends on how long signals stay in band (here not more than 3 days)
-        if ((tc>t0) & (tc-3*86400<t0+N*dT)):
-            signals = np.zeros((len(frequencyvector), len(network.detectors)), dtype=complex)  # contains only 1 of 3 streams in case of ET
-            for d in np.arange(len(network.detectors)):
-                wave, t_of_f = gw.waveforms.hphc_amplitudes(waveform_model, parameter_values,
-                                                            network.detectors[d].frequencyvector)
+    if os.path.exists(args.outdir+fname+'.txt'):
+        print('Loading CBC population')
+        h_of_f = np.loadtxt(args.outdir+fname+'.txt').view(complex)
+        h_of_f = np.expand_dims(h_of_f, 1)
+    else:
+        print('Processing CBC population')
+        for k in tqdm(np.arange(ns)):
+            parameter_values = parameters.iloc[k]
+            tc = parameter_values['geocent_time']
+    
+            # make a precut on the signals; note that this depends on how long signals stay in band (here not more than 3 days)
+            if ((tc>t0) & (tc-3*86400<t0+N*dT)):
+                signals = np.zeros((len(frequencyvector), len(network.detectors)), dtype=complex)  # contains only 1 of 3 streams in case of ET
+                for d in np.arange(len(network.detectors)):
+                    wave, t_of_f = gw.waveforms.hphc_amplitudes(waveform_model, parameter_values,
+                                                                network.detectors[d].frequencyvector)
+    
+                    det_signals = gw.detection.projection(parameter_values, network.detectors[d], wave, t_of_f)
+                    signals[:,d] = det_signals[:,0]
+    
+                    SNRs = gw.detection.SNR(network.detectors[d], det_signals, duty_cycle=duty_cycle)
+                    network.detectors[d].SNR = np.sqrt(np.sum(SNRs ** 2))
+    
+                SNRsq = 0
+                for detector in network.detectors:
+                    SNRsq += detector.SNR ** 2
+    
+                if (np.sqrt(SNRsq) < threshold_SNR):
+                    for n in np.arange(N):
+                        t1 = t0+n*dT
+                        t2 = t1+dT
+                        ii = np.argwhere((t_of_f[:,0] < t1) | (t_of_f[:,0] > t2))
+                        signals_ii = np.copy(signals)
+    
+                        if (len(ii) < len(t_of_f)):
+                            #print("Signal {0} contributes to segment {1}.".format(k,n))
+                            cnt[n] += 1
+                            signals_ii[ii,:] = 0
+                            h_of_f[:,:,n] += signals_ii
 
-                det_signals = gw.detection.projection(parameter_values, network.detectors[d], wave, t_of_f)
-                signals[:,d] = det_signals[:,0]
-
-                SNRs = gw.detection.SNR(network.detectors[d], det_signals, duty_cycle=duty_cycle)
-                network.detectors[d].SNR = np.sqrt(np.sum(SNRs ** 2))
-
-            SNRsq = 0
-            for detector in network.detectors:
-                SNRsq += detector.SNR ** 2
-
-            if (np.sqrt(SNRsq) < threshold_SNR):
-                for n in np.arange(N):
-                    t1 = t0+n*dT
-                    t2 = t1+dT
-                    ii = np.argwhere((t_of_f[:,0] < t1) | (t_of_f[:,0] > t2))
-                    signals_ii = np.copy(signals)
-
-                    if (len(ii) < len(t_of_f)):
-                        #print("Signal {0} contributes to segment {1}.".format(k,n))
-                        cnt[n] += 1
-                        signals_ii[ii,:] = 0
-                        h_of_f[:,:,n] += signals_ii
+        np.savetxt(args.outdir+fname+'.txt',np.squeeze(h_of_f).view(float))
 
     analyzeForeground(network, h_of_f, dT)
 
