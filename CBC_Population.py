@@ -84,7 +84,7 @@ def main():
     # example to run with command-line argument:
     # python CBC_Population.py --ns=10000
 
-    folder = './injections/'
+    folder = 'GWFish/injections/'
 
     parser = argparse.ArgumentParser()
     parser.add_argument(
