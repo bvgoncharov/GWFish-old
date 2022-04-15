@@ -5,7 +5,7 @@ BBH:
 python GWFish/CBC_Background.py --pop_file GWFish/injections/BBH_1e5.hdf5 --config GWFish/GWFish/detectors.yaml --outdir /home/boris.goncharov/null_stream_out/gwfish/
 
 BNS:
-python GWFish/CBC_Background.py --pop_file GWFish/injections/BNS_pop.hdf5 --config GWFish/GWFish/detectors.yaml --outdir /home/boris.goncharov/null_stream_out/gwfish/
+python GWFish/CBC_Background.py --pop_file /home/boris.goncharov/null_stream_out/gwfish/BNS_pop.hdf5 --config GWFish/GWFish/detectors.yaml --outdir /home/boris.goncharov/null_stream_out/gwfish/
 """
 
 import numpy as np
@@ -69,12 +69,12 @@ def analyzeForeground(network, h_of_f, dT, plotname, pop_name):
         #for realization in psd_astro_all.T:
         #  plt.loglog(ff, realization, alpha=1/psd_astro_all.shape[1]**0.25, color='brown', linewidth=0.1)
 
-        bb = np.logspace(-54, -43, 1000)
+        bb = np.logspace(-27, -21.5, 1000)
         aa = np.logspace(np.log10(2),np.log10(1000),1000)
         hist = np.zeros((len(bb) - 1, len(aa)))
         for aa_idx, aa_val in enumerate(aa):
             #idx_ff = (np.abs(ff - aa_val)).argmin()
-            hist[:, aa_idx] = np.histogram(psd_astro_all[(np.abs(ff - aa_val)).argmin(), :], bins=bb)[0]
+            hist[:, aa_idx] = np.histogram(np.sqrt(psd_astro_all[(np.abs(ff - aa_val)).argmin(), :]), bins=bb)[0]
         bb = np.delete(bb, -1)
 
         # calculate percentiles
@@ -103,9 +103,9 @@ def analyzeForeground(network, h_of_f, dT, plotname, pop_name):
         #cm = plt.pcolormesh(np.transpose(aa), bb, hist, cmap=cmap, norm=LogNorm(vmin=0.1, vmax=np.max(hist)),linewidth=0,rasterized=True) # For 0 = 0.0001
         cm = plt.pcolormesh(np.transpose(aa), bb, hist, cmap=cmap, norm=LogNorm(vmin=1, vmax=np.max(hist)),linewidth=0,rasterized=True) # For 0 = nan
         # plt.loglog(ff, h_astro)
-        plt.loglog(aa, components[0].Sn(aa), color='#D10000', alpha = 0.9, linewidth = 1.5)
+        plt.loglog(aa, np.sqrt(components[0].Sn(aa)), color='#D10000', alpha = 0.9, linewidth = 1.5)
         #plt.loglog(aa, np.sqrt(components[0].Sn(aa)), color='#FFFFFF', alpha = 0.8, linewidth = 1.2, linestyle='--')
-        plt.fill_between(ff,psd_stoch[pop_name]['low'],psd_stoch[pop_name]['high'],color='#F87217',alpha=0.6,label='BBH')
+        plt.fill_between(ff,np.sqrt(psd_stoch[pop_name]['low']),np.sqrt(psd_stoch[pop_name]['high']),color='#F87217',alpha=0.6,label='BBH')
         #plt.loglog(ff,np.sqrt(psd_stoch[pop_name]['max']),color='red',linewidth=0.5,alpha=0.9)
         plt.loglog(aa, bb[ii10], 'w-',linewidth=0.4)
         plt.loglog(aa, bb[ii50], 'w-',linewidth=0.4)
@@ -115,13 +115,13 @@ def analyzeForeground(network, h_of_f, dT, plotname, pop_name):
         #plt.loglog(aa, bb[ii90], 'k--',linewidth=0.7)
         axes.set_xlabel('$\mathrm{Frequency~[Hz]}$', fontdict=font)
         #axes.set_ylabel('$\mathrm{Strain~spectra~[Hz}^{-1/2}\mathrm{]}$', fontdict=font)
-        axes.set_ylabel('$\mathrm{PSD~[s]}$', fontdict=font)
+        axes.set_ylabel('$\mathrm{Strain~spectra~[Hz}^{-1/2}\mathrm{]}$', fontdict=font)
         axes.tick_params(axis='y', labelsize = font['size'])
         axes.tick_params(axis='x', labelsize = font['size'])
         #plt.xlabel('Frequency [Hz]', fontsize=20)
         #plt.ylabel(r"Strain spectra [$1/\sqrt{\rm Hz}$]", fontsize=20)
         plt.xlim([2,1000])
-        plt.ylim([10**(-52),10**(-43.6)])
+        plt.ylim([10**(-26),10**(-21.8)])
         cb = plt.colorbar()
         cb.set_label(label='$N$',size=font['size'],family=font['family'])
         cb.ax.tick_params(labelsize=font['size'])
@@ -169,19 +169,19 @@ def main():
     args = parser.parse_args()
     ConfigDet = args.config
 
-    #popname = 'BBH'
-    #dT = 60
-    #N = 7200
+    popname = 'BBH'
+    dT = 60
+    N = 7200
     #dT = 24*3600
     #N = 300
     #dT = 3600
     #N = 1000
 
-    popname = 'BNS'
+    #popname = 'BNS'
     #dT = 60
     #N = 7200
-    dT = 24*3600
-    N = 300
+    #dT = 24*3600
+    #N = 300
 
     t0 = 1104105616
 
