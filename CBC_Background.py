@@ -60,7 +60,7 @@ def analyzeForeground(network, h_of_f, dT, plotname, pop_name):
           }
         }
         components = network.detectors[d].components
-        psd_astro_all = np.abs(np.squeeze(h_of_f[:, d, :])) ** 2 / dT
+        psd_astro_all = 2 * np.abs(np.squeeze(h_of_f[:, d, :])) ** 2 / dT
         N = len(psd_astro_all[0, :])
 
         #plotrange = components[0].plotrange
@@ -169,19 +169,19 @@ def main():
     args = parser.parse_args()
     ConfigDet = args.config
 
-    popname = 'BBH'
-    dT = 60
-    N = 7200
+    #popname = 'BBH'
+    #dT = 60
+    #N = 7200
     #dT = 24*3600
     #N = 300
     #dT = 3600
     #N = 1000
 
-    #popname = 'BNS'
+    popname = 'BNS'
     #dT = 60
     #N = 7200
-    #dT = 24*3600
-    #N = 300
+    dT = 24*3600
+    N = 300
 
     t0 = 1104105616
 
